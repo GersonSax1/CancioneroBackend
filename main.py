@@ -18,48 +18,47 @@ def procesar_docx(content):
     canciones = []
     titulo_actual = "Sin Título"
     letra_actual = []
-    
-    linea_anterior_vacia = True 
 
     for para in doc.paragraphs:
         texto = para.text.strip()
         
+        # Ignorar números de página
         if texto.isdigit():
             continue
 
+        # Respetar saltos de línea para la app
         if not texto:
-            linea_anterior_vacia = True
             if letra_actual and letra_actual[-1] != "":
                 letra_actual.append("")
             continue
 
         palabras = len(texto.split())
         texto_minusculas = texto.lower()
+        
+        # Evitar falsos positivos como coros o notas de repetición
         empieza_con_coro = texto_minusculas.startswith("coro")
+        empieza_con_simbolo = texto.startswith("//") or texto.startswith("(") or texto.startswith("-")
 
+        # Detectar la Negrita
         es_negrita = False
         for run in para.runs:
             if run.bold:
                 es_negrita = True
                 break
-        
         if not es_negrita and para.style.font.bold:
             es_negrita = True
 
-        # Ampliamos el criterio: Es título si está en negrita O si está TODO EN MAYÚSCULAS
-        es_formato_titulo = es_negrita or texto.isupper()
         es_titulo = False
         
-        # REGLA 1 (Ideal): Tiene formato, viene de un espacio vacío y es corto
-        if es_formato_titulo and linea_anterior_vacia and not empieza_con_coro and palabras <= 12:
-            es_titulo = True
-            
-        # REGLA 2 (Rescate): Tiene formato y es corto, pero se les olvidó el espacio (Enter) antes del título.
-        # Lo aceptamos como título SOLO si la canción anterior ya tiene un largo razonable (mínimo 6 líneas)
-        elif es_formato_titulo and not linea_anterior_vacia and not empieza_con_coro and palabras <= 12:
-            if len([l for l in letra_actual if l.strip()]) >= 6:
-                es_titulo = True
+        # LA REGLA DE ORO: 
+        # Es título solo si tiene NEGRITA, NO es coro ni símbolo, y tiene MÁXIMO 6 PALABRAS
+        # (Se permiten hasta 7 palabras si incluye un acorde musical como "(LA)")
+        limite_palabras = 7 if "(" in texto and ")" in texto else 6
 
+        if es_negrita and not empieza_con_coro and not empieza_con_simbolo and palabras <= limite_palabras:
+            es_titulo = True
+
+        # Forzar el primer título si el documento inicia directo
         if len(canciones) == 0 and titulo_actual == "Sin Título" and not letra_actual and not empieza_con_coro:
             es_titulo = True
 
@@ -75,9 +74,8 @@ def procesar_docx(content):
             letra_actual = []
         else:
             letra_actual.append(texto)
-            
-        linea_anterior_vacia = False
 
+    # Guardar la última canción
     lineas_validas = [l for l in letra_actual if l.strip()]
     if lineas_validas:
         canciones.append({
@@ -94,8 +92,6 @@ def procesar_texto_plano(texto_completo):
     canciones = []
     titulo_actual = "Sin Título"
     letra_actual = []
-    
-    linea_anterior_vacia = True
 
     for i in range(len(lineas)):
         linea_limpia = lineas[i].strip()
@@ -104,7 +100,6 @@ def procesar_texto_plano(texto_completo):
             continue
 
         if not linea_limpia:
-            linea_anterior_vacia = True
             if letra_actual and letra_actual[-1] != "":
                 letra_actual.append("")
             continue
@@ -112,10 +107,11 @@ def procesar_texto_plano(texto_completo):
         palabras = len(linea_limpia.split())
         texto_minusculas = linea_limpia.lower()
         empieza_con_coro = texto_minusculas.startswith("coro")
+        empieza_con_simbolo = linea_limpia.startswith("//") or linea_limpia.startswith("(")
 
         es_titulo = False
         
-        if linea_anterior_vacia and not empieza_con_coro and palabras <= 10 and linea_limpia.isupper():
+        if not empieza_con_coro and not empieza_con_simbolo and palabras <= 6 and linea_limpia.isupper():
             es_titulo = True
 
         if len(canciones) == 0 and titulo_actual == "Sin Título" and not letra_actual and not empieza_con_coro:
@@ -133,8 +129,6 @@ def procesar_texto_plano(texto_completo):
             letra_actual = []
         else:
             letra_actual.append(linea_limpia)
-            
-        linea_anterior_vacia = False
 
     lineas_validas = [l for l in letra_actual if l.strip()]
     if lineas_validas:
