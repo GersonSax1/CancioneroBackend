@@ -19,17 +19,14 @@ def procesar_docx(content):
     titulo_actual = "Sin Título"
     letra_actual = []
     
-    # Control para asegurar que el título venga después de un espacio
     linea_anterior_vacia = True 
 
     for para in doc.paragraphs:
         texto = para.text.strip()
         
-        # Ignorar números de página
         if texto.isdigit():
             continue
 
-        # Mantener los espacios vacíos y registrarlos
         if not texto:
             linea_anterior_vacia = True
             if letra_actual and letra_actual[-1] != "":
@@ -38,8 +35,6 @@ def procesar_docx(content):
 
         palabras = len(texto.split())
         texto_minusculas = texto.lower()
-        
-        # Ignorar cualquier línea que empiece con "coro" (ej: "Coro...", "Coro (Sube tono)")
         empieza_con_coro = texto_minusculas.startswith("coro")
 
         es_negrita = False
@@ -51,14 +46,20 @@ def procesar_docx(content):
         if not es_negrita and para.style.font.bold:
             es_negrita = True
 
+        # Ampliamos el criterio: Es título si está en negrita O si está TODO EN MAYÚSCULAS
+        es_formato_titulo = es_negrita or texto.isupper()
         es_titulo = False
         
-        # LA TRIPLE VALIDACIÓN DEFINITIVA:
-        # 1. Es Negrita | 2. Viene de un espacio vacío | 3. No empieza con "Coro" | 4. Es corto
-        if es_negrita and linea_anterior_vacia and not empieza_con_coro and palabras <= 12:
+        # REGLA 1 (Ideal): Tiene formato, viene de un espacio vacío y es corto
+        if es_formato_titulo and linea_anterior_vacia and not empieza_con_coro and palabras <= 12:
             es_titulo = True
+            
+        # REGLA 2 (Rescate): Tiene formato y es corto, pero se les olvidó el espacio (Enter) antes del título.
+        # Lo aceptamos como título SOLO si la canción anterior ya tiene un largo razonable (mínimo 6 líneas)
+        elif es_formato_titulo and not linea_anterior_vacia and not empieza_con_coro and palabras <= 12:
+            if len([l for l in letra_actual if l.strip()]) >= 6:
+                es_titulo = True
 
-        # Asegurar el título de la primera canción del documento
         if len(canciones) == 0 and titulo_actual == "Sin Título" and not letra_actual and not empieza_con_coro:
             es_titulo = True
 
@@ -75,10 +76,8 @@ def procesar_docx(content):
         else:
             letra_actual.append(texto)
             
-        # Al pasar por aquí, la línea dejó de estar vacía
         linea_anterior_vacia = False
 
-    # Guardar la última canción
     lineas_validas = [l for l in letra_actual if l.strip()]
     if lineas_validas:
         canciones.append({
@@ -116,7 +115,6 @@ def procesar_texto_plano(texto_completo):
 
         es_titulo = False
         
-        # En PDF (texto plano) requerimos espacio vacío, mayúsculas y no ser coro
         if linea_anterior_vacia and not empieza_con_coro and palabras <= 10 and linea_limpia.isupper():
             es_titulo = True
 
