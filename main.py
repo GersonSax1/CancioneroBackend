@@ -18,24 +18,30 @@ def procesar_docx(content):
     canciones = []
     titulo_actual = "Sin Título"
     letra_actual = []
+    
+    # Control para asegurar que el título venga después de un espacio
+    linea_anterior_vacia = True 
 
     for para in doc.paragraphs:
         texto = para.text.strip()
         
-        # Ignorar números sueltos (paginación)
+        # Ignorar números de página
         if texto.isdigit():
             continue
 
-        # Mantener los espacios en blanco para separar estrofas visualmente
+        # Mantener los espacios vacíos y registrarlos
         if not texto:
+            linea_anterior_vacia = True
             if letra_actual and letra_actual[-1] != "":
                 letra_actual.append("")
             continue
 
         palabras = len(texto.split())
-        es_coro = texto.upper().replace(".", "").replace(":", "").replace(" ", "") == "CORO"
+        texto_minusculas = texto.lower()
+        
+        # Ignorar cualquier línea que empiece con "coro" (ej: "Coro...", "Coro (Sube tono)")
+        empieza_con_coro = texto_minusculas.startswith("coro")
 
-        # Detectar estrictamente si la línea tiene formato NEGRITA en Word
         es_negrita = False
         for run in para.runs:
             if run.bold:
@@ -47,17 +53,16 @@ def procesar_docx(content):
 
         es_titulo = False
         
-        # REGLA ÚNICA Y DEFINITIVA: Solo es título si está en NEGRITA, es corto, y no es un "Coro"
-        # Ya no intentamos adivinar por puntos o espacios.
-        if es_negrita and not es_coro and palabras <= 10:
+        # LA TRIPLE VALIDACIÓN DEFINITIVA:
+        # 1. Es Negrita | 2. Viene de un espacio vacío | 3. No empieza con "Coro" | 4. Es corto
+        if es_negrita and linea_anterior_vacia and not empieza_con_coro and palabras <= 12:
             es_titulo = True
 
-        # Forzar el primer título si el documento empieza sin negrita (seguridad inicial)
-        if len(canciones) == 0 and titulo_actual == "Sin Título" and not letra_actual and not es_coro:
+        # Asegurar el título de la primera canción del documento
+        if len(canciones) == 0 and titulo_actual == "Sin Título" and not letra_actual and not empieza_con_coro:
             es_titulo = True
 
         if es_titulo:
-            # Empaquetamos la canción anterior completa antes de iniciar la nueva
             lineas_validas = [l for l in letra_actual if l.strip()]
             if lineas_validas:
                 canciones.append({
@@ -68,10 +73,12 @@ def procesar_docx(content):
             titulo_actual = texto
             letra_actual = []
         else:
-            # Todo lo que no sea título en negrita, se suma a la letra actual
             letra_actual.append(texto)
+            
+        # Al pasar por aquí, la línea dejó de estar vacía
+        linea_anterior_vacia = False
 
-    # Empaquetamos la última canción que quedó en memoria al terminar el documento
+    # Guardar la última canción
     lineas_validas = [l for l in letra_actual if l.strip()]
     if lineas_validas:
         canciones.append({
@@ -88,6 +95,8 @@ def procesar_texto_plano(texto_completo):
     canciones = []
     titulo_actual = "Sin Título"
     letra_actual = []
+    
+    linea_anterior_vacia = True
 
     for i in range(len(lineas)):
         linea_limpia = lineas[i].strip()
@@ -96,20 +105,22 @@ def procesar_texto_plano(texto_completo):
             continue
 
         if not linea_limpia:
+            linea_anterior_vacia = True
             if letra_actual and letra_actual[-1] != "":
                 letra_actual.append("")
             continue
 
         palabras = len(linea_limpia.split())
-        es_coro = linea_limpia.upper().replace(".", "").replace(":", "").replace(" ", "") == "CORO"
+        texto_minusculas = linea_limpia.lower()
+        empieza_con_coro = texto_minusculas.startswith("coro")
 
         es_titulo = False
         
-        # Como en PDF no hay negrita, usamos mayúsculas o reglas simples como respaldo
-        if not es_coro and palabras <= 8 and linea_limpia.isupper():
+        # En PDF (texto plano) requerimos espacio vacío, mayúsculas y no ser coro
+        if linea_anterior_vacia and not empieza_con_coro and palabras <= 10 and linea_limpia.isupper():
             es_titulo = True
 
-        if len(canciones) == 0 and titulo_actual == "Sin Título" and not letra_actual and not es_coro:
+        if len(canciones) == 0 and titulo_actual == "Sin Título" and not letra_actual and not empieza_con_coro:
             es_titulo = True
 
         if es_titulo:
@@ -124,6 +135,8 @@ def procesar_texto_plano(texto_completo):
             letra_actual = []
         else:
             letra_actual.append(linea_limpia)
+            
+        linea_anterior_vacia = False
 
     lineas_validas = [l for l in letra_actual if l.strip()]
     if lineas_validas:
